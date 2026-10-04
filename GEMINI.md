@@ -1,84 +1,153 @@
-# 微信AI助手 (WeChat AI Assistant) - 项目设计与开发规范
+# 微信AI助手 (WeChat AI Assistant) — 全局架构与开发规范手册
 
-本文档为 Antigravity (AGY) Agent 的项目上下文指引文件（等同于 Claude 的 `CLAUDE.md`）。在后续任何会话或任务中，Agent 均会自动加载并遵循本文件中的规范。
-
----
-
-## 1. 项目愿景与核心功能
-
-- **定位**：全天候运行的家庭/个人**微信 AI 语言助手**。
-- **免安装跨端**：手机与电脑端浏览器均可秒级打开，支持添加到手机主屏幕 (PWA)。
-- **语音输入**：支持按住说话，调用浏览器原生 Web Speech API 或 Gemini 音频识别。
-- **AI 语义解析**：通过 Google Gemini Flash API 精准提取中文口语指令中的：
-  - 触发时间（例如“5分钟后”、“明天早上9点”）
-  - 目标接收人（例如“我”、“父亲”、“母亲”、“朋友名字”）
-  - 提醒内容与动作
-- **一对一私密推送**：到点后通过**微信公众平台测试号模板消息**直接推送到指定人的个人微信，具有高优先级强提醒弹窗，绝不发群聊，严格保障隐私。
-- **任务时间线**：用户可随时查看未来所有待触发提醒，支持查看历史并一键撤销/删除。
+> **Antigravity AI 上下文持久记忆文件**（等同于 Claude Code 的 `CLAUDE.md`）。在后续任何对话或任务中，AI 将自动加载并遵守本文档中的所有设计规范、架构标准与操作约定。
 
 ---
 
-## 2. 最终确认的技术栈 (Cloudflare Serverless 架构)
+## 1. 项目概况与部署状态 (Project Overview & Status)
 
-对齐 PAPAYA 电脑教室设计，采用单一平台全家桶架构，零额外服务器开销，电脑关机亦 24 小时在线：
+- **项目定位**：基于 Cloudflare Serverless 与 Google Gemini 的全天候微信 AI 语音提醒助手。免安装 App、手机电脑全自适应、任务云端持久化、电脑关机无忧、微信一对一私密推送。
+- **开源代码库**：`https://github.com/ForeverFerret/wechat-ai-assistant.git`
+- **线上正式环境**：
+  - **前端应用 (Web App)**: `https://wechat-ai-assistant-978.pages.dev`
+  - **后端 API 中心**: `https://wechat-ai-assistant-backend.chinanetysj.workers.dev`
+  - **云端 D1 数据库**: `wechat_ai_db` (`6f561c78-cd7a-4de2-aaf5-f07a072c7299`)
+  - **定时触发器 (Cron)**: `* * * * *` (每分钟轮询触发)
+
+---
+
+## 2. 核心技术栈架构 (Technology Stack)
+
+对齐 PAPAYA 电脑教室设计，采用单一 Cloudflare 平台全托管方案：
 
 | 模块 | 技术选型 | 说明 |
 | :--- | :--- | :--- |
-| **云端托管与 API** | **Cloudflare Workers** | 免费额度每天 10 万次请求，0 毫秒冷启动，全球边缘运行 |
-| **网页前端** | **Cloudflare Pages (Vue 3 / Vite / Tailwind)** | 响应式设计，适配手机竖屏与电脑桌面 |
-| **持久化数据库** | **Cloudflare D1 (Serverless SQLite)** | 永久存储待触发与已触发任务，断电/重启不丢失 |
-| **定时调度引擎** | **Cloudflare Cron Triggers** | `* * * * *`（每分钟轮询 D1 到期任务并触发推送，不依赖外挂保活） |
-| **AI 语言模型** | **Google Gemini Flash API** | 中文自然语言与时间格式结构化提取 |
-| **通知通道** | **微信公众平台测试号 (模板消息)** | 官方直推个人微信，无 IP 白名单封锁，无需域名备案 |
+| **前端应用** | Vue 3 + Vite 6 + Tailwind CSS v4 | 移动端优先自适应，支持 PWA“添加到主屏幕” |
+| **语音输入** | 现代浏览器 Web Speech API (`zh-CN`) | 原生普通话高准确率语音转写，附带文本输入兜底 |
+| **AI 语义解析** | **Google Gemini 3.8 Flash API** | 中文自然语言口语精准提取时间、人物与提醒内容 |
+| **容错降级** | 本地智能中文时间规则解析引擎 | 当 AI 网络波动或鉴权受阻时 0ms 自动接管，100% 高可用 |
+| **后端 API** | **Cloudflare Workers (Hono 框架)** | 全球边缘运行，0ms 冷启动，极简轻量路由 |
+| **云端持久化** | **Cloudflare D1 (Serverless SQLite)** | 永久存储待触发提醒、已完成历史与成员绑定关系 |
+| **定时调度** | **Cloudflare Cron Triggers** | 每分钟自动唤醒 Worker 扫描 `trigger_time <= now()` 的任务 |
+| **消息下发** | **微信公众平台测试号模板消息 API** | 直发目标微信号服务号私聊对话框，无 IP 限制，严格隐私隔离 |
 
 ---
 
-## 3. 已验证凭证与沙箱参数
-
-> ⚠️ 注意：以下测试号凭证已在本地脚本 `prototypes/send_wechat_reminder.py` 实测 100% 验证成功：
-
-- **WeChat AppID**: `wx16e8c7a101ca20da`
-- **WeChat AppSecret**: `[已通过环境变量与云端 Secret 安全隔离]`
-- **Template ID**: `8OuR21EjgXZeQY12NrU44-nw1MEV7_6dA-4xoMokuWk`
-
-- **默认用户 OpenID (“我”)**: `ob9no23o6zOS_Fkx4C-g6KnTNhH4`
-- **模板消息字段规范**：
-  - `first`: 标题/主提醒标语
-  - `keyword1`: 提醒事项
-  - `keyword2`: 提醒时间 (YYYY-MM-DD HH:mm)
-  - `remark`: 备注信息
-
----
-
-## 4. 目录规范
+## 3. 系统架构与数据流向
 
 ```
-d:\Projects\wechat-ai-assistant/
-├── GEMINI.md              # [核心] 本规范说明书（上下文持久记忆）
-├── README.md              # 项目总体说明与快速指引
-├── prototypes/            # 早期打通验证的独立原型脚本
-│   ├── send_wechat_reminder.py
-│   └── wechat_sandbox_test.py
-├── frontend/              # 响应式 Web 前端代码
-│   ├── src/
-│   │   ├── components/    # 录音按钮、时间线卡片、成员管理
-│   │   └── App.vue
-│   └── package.json
-├── backend/               # Cloudflare Worker 后端逻辑
-│   ├── src/
-│   │   ├── index.ts       # Worker 路由与 Cron 处理入口
-│   │   ├── gemini.ts      # Gemini API 调用
-│   │   ├── wechat.ts      # 微信 AccessToken 刷新与模板消息发送
-│   │   └── db.ts          # D1 数据库操作
-│   └── wrangler.toml      # Cloudflare 配置文件
-└── schema.sql             # D1 数据库初始化表结构
+[ 用户语音 / 文本输入 ]
+        │
+        ▼
+[ 前端界面 (Vue 3 / Vite) ]
+ (wechat-ai-assistant-978.pages.dev)
+        │ POST /api/parse
+        ▼
+[ 后端边缘计算 (Cloudflare Workers / Hono) ]
+ (wechat-ai-assistant-backend.chinanetysj.workers.dev)
+   ├── 优先调用: Google Gemini 3.8 Flash API
+   └── 容错降级: 本地智能中文时间规则解析引擎
+        │
+        ▼ 写入待办任务
+[ 云端数据库 (Cloudflare D1 SQLite) ]
+ (tasks 表: 目标人, OpenID, 提醒内容, 触发时间 UTC+8)
+        │
+        ▼ 每分钟轮询
+[ 云端定时器 (Cloudflare Cron Triggers) ]
+ (检索到期任务: trigger_time <= 当前北京时间)
+        │ 调用微信模板消息 API
+        ▼
+[ 个人微信服务号对话框 ] (高优先级卡片声音/震动强提醒)
+ ├── 👤 我的微信 (私聊弹窗)
+ ├── 👵 母亲微信 (私聊弹窗)
+ └── 👴 父亲/朋友微信 (私聊弹窗)
 ```
 
 ---
 
-## 5. 开发与编码守则
+## 4. 数据库设计 (D1 Schema)
 
-1. **隐私优先原则**：所有提醒必须精准推送至特定用户的 `openid`，不可混合。
-2. **时区一致性**：所有输入时间和数据库比对必须以 `Asia/Shanghai (UTC+8)` 为标准，防止因 Cloudflare 边缘节点 UTC 偏差导致错发。
-3. **Token 缓存机制**：微信 `access_token` 有效期 7200 秒，须妥善缓存，避免每发一条消息均请求一次微信导致调用超频。
-4. **安全防刷**：生产环境 API 需提供家庭访问口令验证。
+### `users` 表 (成员绑定关系)
+- `id`: INTEGER PRIMARY KEY AUTOINCREMENT
+- `name`: TEXT NOT NULL UNIQUE (称谓，如 "我", "母亲", "父亲")
+- `aliases`: TEXT (口语别名，如 "妈妈,老妈,母上")
+- `openid`: TEXT NOT NULL (微信测试号 OpenID)
+- `is_default`: INTEGER DEFAULT 0 (是否默认接收人)
+
+### `tasks` 表 (提醒排程列表)
+- `id`: INTEGER PRIMARY KEY AUTOINCREMENT
+- `creator_name`: TEXT DEFAULT '我'
+- `target_name`: TEXT NOT NULL
+- `target_openid`: TEXT NOT NULL
+- `content`: TEXT NOT NULL
+- `trigger_time`: TEXT NOT NULL (格式: `YYYY-MM-DD HH:mm:ss`, UTC+8)
+- `raw_input`: TEXT
+- `status`: TEXT DEFAULT 'pending' (`pending` | `sent` | `cancelled` | `failed`)
+- `created_at`: DATETIME DEFAULT CURRENT_TIMESTAMP
+- `sent_at`: DATETIME
+- `error_message`: TEXT
+
+### `system_kv` 表 (系统键值缓存)
+- 用于缓存微信 `access_token` (有效期 7200 秒)，防止高频请求腾讯接口超限。
+
+---
+
+## 5. API 接口规范 (API Endpoints)
+
+所有受保护接口均需在 Header 携带 `x-family-token: family123`（前端已内置自动携带）。
+
+- `GET  /api/health` — 健康检查与实时北京时间同步 (公开)
+- `POST /api/auth/login` — 家庭口令验证与授权 (公开)
+- `GET  /api/users` — 获取已登记成员列表
+- `POST /api/users` — 新增或更新成员微信绑定
+- `DELETE /api/users/:id` — 删除指定成员
+- `POST /api/parse` — 提交语音文字，调用 Gemini 3.8 Flash 解析意图
+- `POST /api/tasks` — 确认创建定时提醒任务并写入 D1
+- `GET  /api/tasks` — 获取时间线任务列表 (支持 `?status=pending`)
+- `DELETE /api/tasks/:id` — 撤销未触发的任务 (`status='cancelled'`)
+- `POST /api/cron/trigger` — 手动触发定时轮询 (供调试与外部 Webhook 调用)
+- `POST /api/test-push` — 立即向指定 OpenID 下发一条微信测试卡片
+
+---
+
+## 6. 常用开发与运维命令清单
+
+### 本地日常开发
+```bash
+# 方式一：双击根目录下 start.bat 一键启动前后端并打开浏览器
+start.bat
+
+# 方式二：手动分别启动
+cd backend  && npm run dev      # 启动本地 Worker 与本地 D1 (端口 8787)
+cd frontend && npm run dev      # 启动本地 Vue 3 前端 (端口 5173)
+```
+
+### 自动化测试
+```bash
+python -X utf8 test_e2e.py      # 执行全链路端到端自动化测试
+```
+
+### GitHub 安全同步
+```bash
+push.bat                        # 双击自动推送脱敏代码到 GitHub
+```
+
+### 云端重新部署
+```bash
+# 1. 部署后端 Worker 与云端定时器
+cd backend
+$env:CLOUDFLARE_API_TOKEN="<TOKEN>"; npx wrangler deploy
+
+# 2. 部署前端网页到 Pages CDN
+cd ../frontend
+npm run build
+$env:CLOUDFLARE_API_TOKEN="<TOKEN>"; npx wrangler pages deploy dist --project-name=wechat-ai-assistant --branch=main
+```
+
+---
+
+## 7. 安全与脱敏红线 (Security Guidelines)
+
+1. **零密钥入库**：微信 AppSecret、Gemini API Key、Cloudflare Token 严禁明文提交至 Git 仓库，必须通过 `.dev.vars`（本地）或 `wrangler secret put`（云端）管理。
+2. **时区绝对统一**：所有时间解析、数据库写入与触发比对必须锁定为 **`Asia/Shanghai (UTC+8)`**。
+3. **隐私隔离铁律**：所有提醒严禁混合推送，必须一对一推送到指定人的 `openid`。
