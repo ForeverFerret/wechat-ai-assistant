@@ -1,0 +1,11 @@
+{
+  "name": "wechat-ai-assistant",
+  "version": "1.0.0",
+  "description": "微信AI助手 - 全天候云端语音提醒助手",
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "build:frontend": "cd frontend && npm run build",
+    "init:db": "cd backend && npm run d1:init:local"
+  }
+}

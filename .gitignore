@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+dist-ssr/
+*.local
+
+# Cloudflare Wrangler local state & logs
+.wrangler/
+.mf/
+
+# Sensitive secrets (DO NOT COMMIT)
+.dev.vars
+.env
+.env.*
+!.env.example
+
+# Temporary files & screenshots
+Snipaste_*.png
+*.log
+
+# OS generated
+.DS_Store
+Thumbs.db
